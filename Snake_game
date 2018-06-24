@@ -1,0 +1,278 @@
+define snakeHeadL     $10 ;snake head low byte
+define snakeHeadH     $11 ;snake head high byte
+define snakeBodyStart $12 
+define snakeDirection $02 
+define snakeLength    $03 
+define apple          $FE
+define appleL         $04
+define appleH         $05                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      .
+
+define WASD_W $77	;directional keys
+define WASD_A $61
+define WASD_S $73
+define WASD_D $64
+define lastkeypressed $FF	;stores user input
+
+JSR init
+JSR loop
+BRK
+ 
+init:
+  JSR initSnake 
+  JSR applePosition
+  RTS
+  
+initSnake:
+  LDA #$4  ;Length of the snake (goes by 2 bytes)
+  STA snakeLength
+  LDA #$10  ;Position of where snake starts
+  STA snakeHeadL
+  LDA #$00    
+  STA snakeBodyStart
+  LDA #$02      ;Starts at the top of the screen
+  STA snakeHeadH
+  LDA #WASD_S
+  STA snakeDirection
+  RTS
+
+applePosition:
+  LDA $FE
+  STA appleL    ;store position of apple
+  LDA $FE
+  AND #$03
+  CLC
+  ADC #$02
+  STA appleH
+  RTS
+   
+loop:
+  JSR checkKeys 
+  JSR checkCollision
+  JSR drawApple
+  JSR drawSnake
+  JSR updateSnake
+  JSR wasteTime
+  JMP loop
+  
+checkKeys:    ;what direction the snake is headed
+  LDA lastkeypressed
+  CMP #WASD_W
+  BEQ upDir
+  CMP #WASD_A
+  BEQ leftDir
+  CMP #WASD_D
+  BEQ rightDir
+  CMP #WASD_S
+  BEQ downDir
+  RTS
+
+;Snake cannot double back on itself and updates
+upDir:
+  LDA snakeDirection
+  CMP #WASD_S
+  BNE updateDir
+  RTS
+  
+leftDir:
+  LDA snakeDirection
+  CMP #WASD_D
+  BNE updateDir
+  RTS
+
+rightDir:
+  LDA snakeDirection
+  CMP #WASD_A
+  BNE updateDir
+  RTS
+
+downDir:
+  LDA snakeDirection
+  CMP #WASD_W
+  BNE updateDir
+  RTS
+
+updateDir:
+  LDA lastkeypressed
+  CMP #WASD_W
+  BEQ update_up
+  CMP #WASD_D
+  BEQ update_right
+  CMP #WASD_A
+  BEQ update_left
+  CMP #WASD_S
+  BEQ update_down
+  RTS
+   
+;Update direction of snake
+update_up:
+  LDA #WASD_W
+  STA snakeDirection
+  RTS
+update_right:
+  LDA #WASD_D
+  STA snakeDirection
+  RTS
+update_left:
+  LDA #WASD_A
+  STA snakeDirection
+  RTS
+update_down:
+  LDA #WASD_S
+  STA snakeDirection
+  RTS
+  
+checkCollision: 
+  JSR checkAppleCollision
+  JSR checkSnakeCollision
+  RTS
+  
+checkAppleCollision:
+  LDA appleL
+  CMP snakeHeadL
+  BNE continueGame
+  LDA appleH
+  CMP snakeHeadH
+  BNE continueGame
+  
+  INC snakeLength
+  INC snakeLength
+  JSR applePosition
+  RTS
+  
+continueGame:
+  RTS   
+ 
+checkSnakeCollision:
+  LDX #$0
+  LDA (snakeHeadL, X)
+  CMP #$05
+  BEQ hadCollision
+  RTS 
+  
+hadCollision:
+  JMP end
+  
+updateSnake:
+  LDX snakeLength
+  DEX
+  
+shiftValues:
+  LDA snakeHeadL,x
+  STA snakeBodyStart,x
+  DEX			;as it decrements, it will go below 0 and will branch when no longer positive
+  BPL shiftValues
+  
+  LDA snakeDirection
+  CMP #WASD_D
+  BEQ right
+  CMP #WASD_A
+  BEQ left
+  CMP #WASD_W
+  BEQ up
+  CMP #WASD_S
+  BEQ down
+    
+right: 
+ JSR checkCollisionRight ;check if pixel reaches end of right screen
+ CLC
+ INC snakeHeadL
+ RTS
+   
+left:
+ JSR checkCollisionLeft	;check if pixel reaches end of left screen
+ CLC
+ DEC snakeHeadL
+ RTS
+   
+up: 
+  LDA snakeHeadL 
+  SBC #$20
+  STA snakeHeadL
+  BCC upup
+  RTS 
+   
+upup:
+  DEC snakeHeadH	;need separate subroutine or else
+  LDA #$1		;it will keep adding/subtracting
+  CMP snakeHeadH	;in loop
+  BEQ end
+  RTS
+  
+down:
+  LDA snakeHeadL
+  CLC
+  ADC #$20 
+  STA snakeHeadL
+  BCS downdown
+  RTS 
+   
+downdown:
+  INC snakeHeadH
+  LDA #$06
+  CMP snakeHeadH
+  BEQ end
+  RTS
+
+;Since the numbers on the right side of the screen always
+;end in F and are odd numbers, 1F, 3F, 5F, we can AND the
+;values and compare them to make sure they all end in 1F
+
+checkCollisionRight:
+  LDA snakeHeadL
+  AND #$1F
+  CMP #$1F
+  BEQ end
+  RTS
+  
+checkCollisionLeft:
+  LDA snakeHeadL
+  AND #$1F
+  CMP #$00
+  BEQ end
+  RTS
+
+incLo:
+  LDA snakeHeadL
+  CLC
+  ADC #$20
+  STA snakeHeadL
+  BCS incHi
+  RTS
+  
+incHi:
+  LDA snakeHeadH
+  CLC
+  ADC #$01
+  STA snakeHeadH
+  CMP #$06		;Compares to check if at the end of the screen
+  BCS end		  ; will branch to end loop which will break 
+  RTS
+
+;To make snake slow down 
+waste:
+  LDX #$0
+ 
+wasteTime:
+  NOP
+  DEX
+  BNE wasteTime
+  
+drawApple:
+  LDY #$0
+  LDA $fe
+  STA (appleL),y
+  RTS 
+      
+drawSnake:
+  
+  LDX snakeLength
+  LDA #$0
+  STA (snakeHeadL, X) ; erases tail
+
+  LDX #$0 
+  LDA #$5    ;Color of snake
+  STA (snakeHeadL, X) ; draws head
+  RTS
+
+end:
+  BRK
